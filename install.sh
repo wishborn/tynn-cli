@@ -79,15 +79,35 @@ chmod +x "$CUSTOM_DIR"/* 2>/dev/null || true
 ok "Made scripts executable"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Create tynn.config from example if needed
+# Create or update tynn.config (preserve existing license data)
 # ─────────────────────────────────────────────────────────────────────────────
 
 if [[ ! -f "$CONFIG_FILE" && -f "$CONFIG_EXAMPLE" ]]; then
   cp "$CONFIG_EXAMPLE" "$CONFIG_FILE"
   ok "Created tynn.config from template"
   warn "Edit tynn.config to set your SANDBOX_PATH"
-elif [[ -f "$CONFIG_FILE" ]]; then
-  log "tynn.config already exists"
+elif [[ -f "$CONFIG_FILE" && -f "$CONFIG_EXAMPLE" ]]; then
+  # Merge new settings from example without overwriting existing values.
+  # Extracts keys from example, adds any missing ones to the user's config,
+  # and always preserves existing values (especially LICENSES).
+  _new_keys=0
+  while IFS= read -r line; do
+    # Match uncommented variable assignments (KEY="..." or KEY='...')
+    if [[ "$line" =~ ^([A-Z_]+)= ]]; then
+      key="${BASH_REMATCH[1]}"
+      # Only add if key is not already present (commented or uncommented)
+      if ! grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
+        echo "" >> "$CONFIG_FILE"
+        echo "$line" >> "$CONFIG_FILE"
+        _new_keys=$((_new_keys + 1))
+      fi
+    fi
+  done < "$CONFIG_EXAMPLE"
+  if [[ $_new_keys -gt 0 ]]; then
+    ok "Added $_new_keys new config key(s) from template (existing values preserved)"
+  else
+    log "tynn.config is up to date"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
